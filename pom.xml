@@ -3,7 +3,7 @@
   <groupId>org.omnaest.library</groupId>
   <artifactId>PMC4J</artifactId>
   <parent>
-  	<groupId>org.omnaest.commons</groupId>
+  	<groupId>org.omnaest.utils</groupId>
   	<artifactId>CommonsParent</artifactId>
   	<version>0.0.1-SNAPSHOT</version>
   </parent>
