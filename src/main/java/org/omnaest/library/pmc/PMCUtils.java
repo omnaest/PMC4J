@@ -16,6 +16,7 @@ import org.omnaest.library.pmc.rest.PMCRestUtils;
 import org.omnaest.library.pmc.rest.PMCRestUtils.PMCRestAccessor;
 import org.omnaest.library.pmc.rest.PMCRestUtils.PMCRestAccessor.Sort;
 import org.omnaest.library.pmc.rest.domain.raw.ArticleResult;
+import org.omnaest.library.pmc.rest.domain.raw.ArticleResult.ArticleId;
 import org.omnaest.utils.CacheUtils;
 import org.omnaest.utils.PredicateUtils;
 import org.omnaest.utils.StreamUtils;
@@ -134,9 +135,10 @@ public class PMCUtils implements Cacheable<PMCUtils>
 
         private ArticleResult resolveArticle(PMCRestAccessor accessor, String id)
         {
-            return this.cache.computeIfAbsent("Article" + id, () -> accessor.getByArticleId(id)
-                                                                            .getResult()
-                                                                            .get(id),
+            return this.cache.computeIfAbsent("Article" + id, () -> Optional.ofNullable(accessor.getByArticleId(id))
+                                                                            .map(article -> article.getResult())
+                                                                            .map(result -> result.get(id))
+                                                                            .orElse(null),
                                               ArticleResult.class);
         }
 
@@ -226,28 +228,29 @@ public class PMCUtils implements Cacheable<PMCUtils>
         @Override
         public Optional<PMCReference> getPMCReference()
         {
-            return ArticleImpl.this.articleResolver.get()
-                                                   .getArticleids()
-                                                   .stream()
-                                                   .filter(articleId -> articleId.isPMC())
-                                                   .findFirst()
-                                                   .map(articleId -> articleId.getValue())
-                                                   .map(pmcId -> new PMCReference()
-                                                   {
+            return Optional.ofNullable(ArticleImpl.this.articleResolver.get())
+                           .map(ArticleResult::getArticleids)
+                           .map(List<ArticleId>::stream)
+                           .orElse(Stream.empty())
+                           .filter(articleId -> articleId.isPMC())
+                           .findFirst()
+                           .map(articleId -> articleId.getValue())
+                           .map(pmcId -> new PMCReference()
+                           {
 
-                                                       @Override
-                                                       public String getLink(LinkType linkType)
-                                                       {
-                                                           String link = "https://www.ncbi.nlm.nih.gov/pmc/articles/" + this.getId();
-                                                           return linkType.apply(link);
-                                                       }
+                               @Override
+                               public String getLink(LinkType linkType)
+                               {
+                                   String link = "https://www.ncbi.nlm.nih.gov/pmc/articles/" + this.getId();
+                                   return linkType.apply(link);
+                               }
 
-                                                       @Override
-                                                       public String getId()
-                                                       {
-                                                           return pmcId;
-                                                       }
-                                                   });
+                               @Override
+                               public String getId()
+                               {
+                                   return pmcId;
+                               }
+                           });
         }
 
     }
