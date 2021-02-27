@@ -1,18 +1,16 @@
 package org.omnaest.library.pmc.ftp;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.io.IOUtils;
 import org.omnaest.utils.CacheUtils;
 import org.omnaest.utils.cache.Cache;
 import org.omnaest.utils.csv.CSVUtils;
-import org.omnaest.utils.ftp.FTPHelper;
+import org.omnaest.utils.ftp.FTPUtils;
+import org.omnaest.utils.ftp.FTPUtils.FTPResource;
 import org.omnaest.utils.table.Table;
 import org.omnaest.utils.table.components.TableIndex;
 import org.omnaest.utils.table.domain.Row;
@@ -52,16 +50,12 @@ public class PMCFtpUtils
     {
         String csv = this.cache.computeIfAbsent("openAccessArticleIndex", () ->
         {
-            try
-            {
-                return IOUtils.toString(FTPHelper.loadFileContent("ftp://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_non_comm_use_pdf.csv")
-                                                 .get(),
-                                        StandardCharsets.UTF_8);
-            }
-            catch (IOException e)
-            {
-                throw new IllegalStateException(e);
-            }
+            return FTPUtils.load()
+                           .withAnonymousCredentials()
+                           .withNumberOfRetries(2)
+                           .fromUrl("ftp://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_non_comm_use_pdf.csv")
+                           .map(FTPResource::asString)
+                           .orElseThrow(() -> new IllegalStateException("Unable to load article index from ftp"));
         }, String.class);
 
         List<Map<String, String>> rows = CSVUtils.deserializer(CSVFormat.DEFAULT.withFirstRecordAsHeader())
@@ -91,17 +85,14 @@ public class PMCFtpUtils
             public byte[] resolvePDF(String id)
             {
                 String url = this.findUrl(id);
-                try
-                {
-                    return url == null ? null
-                            : IOUtils.toByteArray(FTPHelper.loadFileContent(url)
-                                                           .get());
-                }
-                catch (IOException e)
-                {
-                    throw new IllegalStateException(e);
-                }
 
+                return url == null ? null
+                        : FTPUtils.load()
+                                  .withAnonymousCredentials()
+                                  .withNumberOfRetries(5)
+                                  .fromUrl(url)
+                                  .map(FTPResource::asByteArray)
+                                  .orElseThrow(() -> new IllegalStateException("Failed to load ftp url: " + url));
             }
 
             @Override

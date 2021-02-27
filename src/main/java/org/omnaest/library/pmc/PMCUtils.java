@@ -5,6 +5,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -22,11 +23,18 @@ import org.omnaest.utils.PredicateUtils;
 import org.omnaest.utils.StreamUtils;
 import org.omnaest.utils.cache.Cache;
 import org.omnaest.utils.cache.Cacheable;
+import org.omnaest.utils.element.bi.BiElement;
 import org.omnaest.utils.element.cached.CachedElement;
+import org.omnaest.utils.exception.ExceptionHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class PMCUtils implements Cacheable<PMCUtils>
 {
-    private Cache cache = CacheUtils.newConcurrentInMemoryCache();
+    private static Logger LOG = LoggerFactory.getLogger(PMCUtils.class);
+
+    private Cache            cache            = CacheUtils.newConcurrentInMemoryCache();
+    private ExceptionHandler exceptionHandler = e -> LOG.error("Unexpected exception", e);
 
     private PMCUtils()
     {
@@ -45,6 +53,12 @@ public class PMCUtils implements Cacheable<PMCUtils>
         return this;
     }
 
+    public PMCUtils withExceptionHandler(ExceptionHandler exceptionHandler)
+    {
+        this.exceptionHandler = exceptionHandler;
+        return this;
+    }
+
     public static interface Article
     {
         public String getTitle();
@@ -53,7 +67,9 @@ public class PMCUtils implements Cacheable<PMCUtils>
 
         public Optional<LocalDate> getPublicationDate();
 
-        public byte[] resolvePDF();
+        public Optional<byte[]> resolvePDF();
+
+        public Article resolvePDFIfPresent(Consumer<byte[]> pdfConsumer);
 
         public String getId();
 
@@ -88,6 +104,7 @@ public class PMCUtils implements Cacheable<PMCUtils>
                 }
             }
         }
+
     }
 
     public Stream<Article> searchFor(String query)
@@ -115,7 +132,7 @@ public class PMCUtils implements Cacheable<PMCUtils>
         CachedElement<OpenAccessArticleIndex> articleIndexSupplier = CachedElement.of(() -> this.loadOpenAccessArticleIndex());
         return StreamUtils.fromSupplier(supplier, List::isEmpty)
                           .flatMap(ids -> ids.stream()
-                                             .map(id -> new ArticleImpl(accessor, articleIndexSupplier, id, this.cache)));
+                                             .map(id -> new ArticleImpl(accessor, articleIndexSupplier, id, this.cache, this.exceptionHandler)));
     }
 
     protected static class ArticleImpl implements Article
@@ -124,12 +141,15 @@ public class PMCUtils implements Cacheable<PMCUtils>
         private final String                                id;
         private final CachedElement<ArticleResult>          articleResolver;
         private final Cache                                 cache;
+        private final ExceptionHandler                      exceptionHandler;
 
-        private ArticleImpl(PMCRestAccessor accessor, CachedElement<OpenAccessArticleIndex> articleIndexSupplier, String id, Cache cache)
+        private ArticleImpl(PMCRestAccessor accessor, CachedElement<OpenAccessArticleIndex> articleIndexSupplier, String id, Cache cache,
+                            ExceptionHandler exceptionHandler)
         {
             this.articleIndexSupplier = articleIndexSupplier;
             this.id = id;
             this.cache = cache;
+            this.exceptionHandler = exceptionHandler;
             this.articleResolver = CachedElement.of(() -> this.resolveArticle(accessor, id));
         }
 
@@ -198,11 +218,34 @@ public class PMCUtils implements Cacheable<PMCUtils>
         }
 
         @Override
-        public byte[] resolvePDF()
+        public Optional<byte[]> resolvePDF()
         {
-            return this.cache.computeIfAbsent("PDF" + this.id, () -> this.articleIndexSupplier.get()
-                                                                                              .resolvePDF(this.id),
-                                              byte[].class);
+            try
+            {
+                return Optional.ofNullable(this.cache.computeIfAbsent("PDF" + this.id, () -> this.articleIndexSupplier.get()
+                                                                                                                      .resolvePDF(this.id),
+                                                                      byte[].class));
+            }
+            catch (Exception e)
+            {
+                this.exceptionHandler.accept(e);
+                return Optional.empty();
+            }
+        }
+
+        @Override
+        public Article resolvePDFIfPresent(Consumer<byte[]> pdfConsumer)
+        {
+            Optional.ofNullable(pdfConsumer)
+                    .filter(consumer -> this.hasPDF())
+                    .map(consumer -> BiElement.of(consumer, this.resolvePDF()))
+                    .filter(bi -> bi.hasNoNullValue())
+                    .filter(bi -> bi.getSecond()
+                                    .isPresent())
+                    .ifPresent(bi -> bi.getFirst()
+                                       .accept(bi.getSecond()
+                                                 .get()));
+            return this;
         }
 
         @Override

@@ -102,7 +102,7 @@ public class PMCRestUtils
             {
                 return RestClient.newJSONRestClient()
                                  .withCache(this.cache)
-                                 .withRetry(5, 1, TimeUnit.SECONDS);
+                                 .withRetry(5, 12, TimeUnit.SECONDS);
             }
 
             @Override

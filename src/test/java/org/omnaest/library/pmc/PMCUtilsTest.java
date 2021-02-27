@@ -35,7 +35,8 @@ public class PMCUtilsTest
                     {
                         try
                         {
-                            byte[] pdf = article.resolvePDF();
+                            byte[] pdf = article.resolvePDF()
+                                                .get();
                             if (pdf != null)
                             {
                                 FileUtils.writeByteArrayToFile(new File("C:/Temp/pmc_pdfs_covid/" + id + ".pdf"), pdf);
