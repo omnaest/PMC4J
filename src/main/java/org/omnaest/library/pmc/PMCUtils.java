@@ -18,6 +18,7 @@ package org.omnaest.library.pmc;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -40,7 +41,7 @@ import org.omnaest.utils.cache.Cache;
 import org.omnaest.utils.cache.Cacheable;
 import org.omnaest.utils.element.bi.BiElement;
 import org.omnaest.utils.element.cached.CachedElement;
-import org.omnaest.utils.exception.ExceptionHandler;
+import org.omnaest.utils.exception.handler.ExceptionHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -152,11 +153,11 @@ public class PMCUtils implements Cacheable<PMCUtils>
 
     protected static class ArticleImpl implements Article
     {
-        private final CachedElement<OpenAccessArticleIndex> articleIndexSupplier;
-        private final String                                id;
-        private final CachedElement<ArticleResult>          articleResolver;
-        private final Cache                                 cache;
-        private final ExceptionHandler                      exceptionHandler;
+        private final CachedElement<OpenAccessArticleIndex>  articleIndexSupplier;
+        private final String                                 id;
+        private final CachedElement<Optional<ArticleResult>> articleResolver;
+        private final Cache                                  cache;
+        private final ExceptionHandler                       exceptionHandler;
 
         private ArticleImpl(PMCRestAccessor accessor, CachedElement<OpenAccessArticleIndex> articleIndexSupplier, String id, Cache cache,
                             ExceptionHandler exceptionHandler)
@@ -165,7 +166,7 @@ public class PMCUtils implements Cacheable<PMCUtils>
             this.id = id;
             this.cache = cache;
             this.exceptionHandler = exceptionHandler;
-            this.articleResolver = CachedElement.of(() -> this.resolveArticle(accessor, id));
+            this.articleResolver = CachedElement.of(() -> Optional.ofNullable(this.resolveArticle(accessor, id)));
         }
 
         private ArticleResult resolveArticle(PMCRestAccessor accessor, String id)
@@ -181,14 +182,16 @@ public class PMCUtils implements Cacheable<PMCUtils>
         public String getTitle()
         {
             return this.articleResolver.get()
-                                       .getTitle();
+                                       .map(ArticleResult::getTitle)
+                                       .orElse(null);
         }
 
         @Override
         public List<String> getAuthors()
         {
             return this.articleResolver.get()
-                                       .getAuthors()
+                                       .map(ArticleResult::getAuthors)
+                                       .orElse(Collections.emptyList())
                                        .stream()
                                        .map(author -> author.getName())
                                        .collect(Collectors.toList());
@@ -197,8 +200,9 @@ public class PMCUtils implements Cacheable<PMCUtils>
         @Override
         public Optional<LocalDate> getPublicationDate()
         {
-            return parseDate(this.articleResolver.get()
-                                                 .getPubdate());
+            return this.articleResolver.get()
+                                       .map(ArticleResult::getPubdate)
+                                       .flatMap(ArticleImpl::parseDate);
         }
 
         public static Optional<LocalDate> parseDate(String dateStr)
@@ -286,29 +290,29 @@ public class PMCUtils implements Cacheable<PMCUtils>
         @Override
         public Optional<PMCReference> getPMCReference()
         {
-            return Optional.ofNullable(ArticleImpl.this.articleResolver.get())
-                           .map(ArticleResult::getArticleids)
-                           .map(List<ArticleId>::stream)
-                           .orElse(Stream.empty())
-                           .filter(articleId -> articleId.isPMC())
-                           .findFirst()
-                           .map(articleId -> articleId.getValue())
-                           .map(pmcId -> new PMCReference()
-                           {
+            return ArticleImpl.this.articleResolver.get()
+                                                   .map(ArticleResult::getArticleids)
+                                                   .map(List<ArticleId>::stream)
+                                                   .orElse(Stream.empty())
+                                                   .filter(articleId -> articleId.isPMC())
+                                                   .findFirst()
+                                                   .map(articleId -> articleId.getValue())
+                                                   .map(pmcId -> new PMCReference()
+                                                   {
 
-                               @Override
-                               public String getLink(LinkType linkType)
-                               {
-                                   String link = "https://www.ncbi.nlm.nih.gov/pmc/articles/" + this.getId();
-                                   return linkType.apply(link);
-                               }
+                                                       @Override
+                                                       public String getLink(LinkType linkType)
+                                                       {
+                                                           String link = "https://www.ncbi.nlm.nih.gov/pmc/articles/" + this.getId();
+                                                           return linkType.apply(link);
+                                                       }
 
-                               @Override
-                               public String getId()
-                               {
-                                   return pmcId;
-                               }
-                           });
+                                                       @Override
+                                                       public String getId()
+                                                       {
+                                                           return pmcId;
+                                                       }
+                                                   });
         }
 
     }

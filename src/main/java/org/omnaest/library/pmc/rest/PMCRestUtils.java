@@ -84,7 +84,7 @@ public class PMCRestUtils
             {
                 RestClient restClient = this.newRestClient();
 
-                String url = restClient.urlBuilder()
+                String url = RestClient.urlBuilder()
                                        .setBaseUrl(this.baseUrl)
                                        .addPathToken("esearch.fcgi")
                                        .addQueryParameter("db", "pmc")
@@ -103,7 +103,7 @@ public class PMCRestUtils
             {
                 RestClient restClient = this.newRestClient();
 
-                String url = restClient.urlBuilder()
+                String url = RestClient.urlBuilder()
                                        .setBaseUrl(this.baseUrl)
                                        .addPathToken("esummary.fcgi")
                                        .addQueryParameter("db", "pmc")
