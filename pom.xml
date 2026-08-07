@@ -28,6 +28,11 @@
         <artifactId>CommonsFTP</artifactId>
         <version>0.0.1-SNAPSHOT</version>
     </dependency>
+    <!-- required by RestClient.newXMLRestClient(), used to read the S3 ListObjectsV2 response; version managed by the jackson BOM in CommonsParent -->
+    <dependency>
+        <groupId>com.fasterxml.jackson.dataformat</groupId>
+        <artifactId>jackson-dataformat-xml</artifactId>
+    </dependency>
   	<dependency>
   		<groupId>org.omnaest.utils</groupId>
   		<artifactId>CommonsTest</artifactId>

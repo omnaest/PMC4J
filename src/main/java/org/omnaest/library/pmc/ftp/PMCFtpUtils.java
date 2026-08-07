@@ -30,13 +30,23 @@ import org.omnaest.utils.table.Table;
 import org.omnaest.utils.table.components.TableColumnIndex;
 import org.omnaest.utils.table.domain.Row;
 
+/**
+ * Bulk access to the PMC Open Access Subset over NCBI's FTP service.
+ * <p>
+ * <b>Deprecated - this whole access path is being switched off by NCBI.</b> The PMC article datasets were restructured in 2026: both the OA PDF manifest and
+ * the <code>oa_pdf/</code> tree it indexes were moved into a <code>deprecated/</code> subdirectory, and the former root paths now answer with FTP 550. The
+ * URLs below were repointed at that subdirectory as a stopgap, but <code>ftp.ncbi.nlm.nih.gov/pub/pmc/readme.txt</code> schedules the legacy files themselves
+ * for removal in <b>August 2026</b>, after which nothing in this class can succeed.
+ * <p>
+ * The replacement is the AWS Open Data distribution, reachable anonymously over plain HTTPS and modelled by {@link PMCCloudUtils}. It is strictly better for
+ * this use case: a PDF is addressed by a key derived from the PMCID, so resolving one article no longer requires downloading and parsing a 314 MB manifest.
+ *
+ * @see PMCCloudUtils
+ * @see <a href="https://pmc.ncbi.nlm.nih.gov/tools/cloud/">PMC cloud service documentation</a>
+ */
+@Deprecated
 public class PMCFtpUtils
 {
-    /**
-     * NCBI moved the PMC bulk datasets into a "deprecated" subdirectory; the former root paths now answer with FTP 550. Per
-     * ftp.ncbi.nlm.nih.gov/pub/pmc/readme.txt these legacy files are scheduled for removal in August 2026, so this is a stopgap - the durable replacement is
-     * the AWS Open Data distribution over HTTPS/S3, see https://pmc.ncbi.nlm.nih.gov/tools/cloud/
-     */
     private static final String PMC_FTP_BASE_URL          = "ftp://ftp.ncbi.nlm.nih.gov/pub/pmc/deprecated/";
     private static final String OPEN_ACCESS_PDF_INDEX_URL = PMC_FTP_BASE_URL + "oa_non_comm_use_pdf.csv";
 
