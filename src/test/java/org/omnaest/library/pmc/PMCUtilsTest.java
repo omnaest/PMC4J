@@ -16,10 +16,15 @@
 package org.omnaest.library.pmc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.apache.commons.io.FileUtils;
@@ -63,6 +68,41 @@ public class PMCUtilsTest
                         }
                     }
                 });
+    }
+
+    /**
+     * Drives the whole facade against the live services: ESearch for the id list, ESummary for the bibliographic data, and the open access bucket for the
+     * PDF, full text and license.
+     */
+    @Test
+    @Ignore
+    public void testSearchForAndResolveContent() throws Exception
+    {
+        List<Article> articles = PMCUtils.newInstance()
+                                         .searchFor("adult polyglucosan body disease")
+                                         .limit(20)
+                                         .collect(Collectors.toList());
+
+        assertFalse(articles.isEmpty());
+        articles.forEach(article -> assertNotNull(article.getTitle()));
+
+        Article articleWithPDF = articles.stream()
+                                         .filter(Article::hasPDF)
+                                         .findFirst()
+                                         .get();
+
+        assertEquals("%PDF", new String(articleWithPDF.resolvePDF()
+                                                      .get(),
+                                        0, 4));
+        assertTrue(articleWithPDF.resolveFullText()
+                                 .get()
+                                 .length() > 0);
+        assertTrue(articleWithPDF.resolveXML()
+                                 .get()
+                                 .contains("<article"));
+        assertTrue(articleWithPDF.getLicenseCode()
+                                 .isPresent());
+        assertFalse(articleWithPDF.isRetracted());
     }
 
     @Test

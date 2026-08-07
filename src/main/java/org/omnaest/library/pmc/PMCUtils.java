@@ -27,8 +27,8 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.omnaest.library.pmc.ftp.PMCFtpUtils;
-import org.omnaest.library.pmc.ftp.PMCFtpUtils.OpenAccessArticleIndex;
+import org.omnaest.library.pmc.cloud.PMCCloudUtils;
+import org.omnaest.library.pmc.cloud.PMCCloudUtils.CloudArticle;
 import org.omnaest.library.pmc.rest.PMCRestUtils;
 import org.omnaest.library.pmc.rest.PMCRestUtils.PMCRestAccessor;
 import org.omnaest.library.pmc.rest.PMCRestUtils.PMCRestAccessor.Sort;
@@ -87,6 +87,26 @@ public class PMCUtils implements Cacheable<PMCUtils>
 
         public Article resolvePDFIfPresent(Consumer<byte[]> pdfConsumer);
 
+        /**
+         * The full text as plain text, as extracted from the JATS XML by PMC. Empty if the article is not part of the open access subset.
+         */
+        public Optional<String> resolveFullText();
+
+        /**
+         * The full text as NISO JATS XML. Empty if the article is not part of the open access subset.
+         */
+        public Optional<String> resolveXML();
+
+        /**
+         * The license as encoded by PMC, e.g. <code>CC0</code> or <code>CC BY-NC</code>. Callers redistributing content must honour it.
+         */
+        public Optional<String> getLicenseCode();
+
+        /**
+         * Whether PMC flags this article as retracted.
+         */
+        public boolean isRetracted();
+
         public String getId();
 
         public boolean hasPDF();
@@ -144,36 +164,39 @@ public class PMCUtils implements Cacheable<PMCUtils>
                                .getIdlist();
             }
         };
-        CachedElement<OpenAccessArticleIndex> articleIndexSupplier = CachedElement.of(() -> this.loadOpenAccessArticleIndex());
+        PMCCloudUtils cloudUtils = PMCCloudUtils.newInstance()
+                                                .withCache(this.cache)
+                                                .withExceptionHandler(this.exceptionHandler);
         return StreamUtils.fromSupplier(supplier, List::isEmpty)
                           .flatMap(ids -> ids.stream()
-                                             .map(id -> new ArticleImpl(accessor, articleIndexSupplier, id, this.cache, this.exceptionHandler)));
+                                             .map(id -> new ArticleImpl(accessor, cloudUtils, id)));
     }
 
     protected static class ArticleImpl implements Article
     {
-        private final CachedElement<OpenAccessArticleIndex>  articleIndexSupplier;
         private final String                                 id;
         private final CachedElement<Optional<ArticleResult>> articleResolver;
-        private final Cache                                  cache;
-        private final ExceptionHandler                       exceptionHandler;
+        private final CachedElement<Optional<CloudArticle>>  cloudArticleResolver;
 
-        private ArticleImpl(PMCRestAccessor accessor, CachedElement<OpenAccessArticleIndex> articleIndexSupplier, String id, Cache cache, ExceptionHandler exceptionHandler)
+        private ArticleImpl(PMCRestAccessor accessor, PMCCloudUtils cloudUtils, String id)
         {
-            this.articleIndexSupplier = articleIndexSupplier;
             this.id = id;
-            this.cache = cache;
-            this.exceptionHandler = exceptionHandler;
             this.articleResolver = CachedElement.of(() -> Optional.ofNullable(this.resolveArticle(accessor, id)));
+            this.cloudArticleResolver = CachedElement.of(() -> cloudUtils.findArticle(id));
         }
 
+        /**
+         * Deliberately not wrapped in a {@link Cache#computeIfAbsent(String, Supplier, Class)} of its own: the accessor is configured with the same
+         * {@link Cache}, and its {@link org.omnaest.utils.rest.client.RestClient} already caches the response under the request URL, to which an article id
+         * maps one to one. Nesting the two made a concurrent in memory cache throw {@link IllegalStateException} "Recursive update" whenever the inner key
+         * happened to land in the bin the outer one was updating.
+         */
         private ArticleResult resolveArticle(PMCRestAccessor accessor, String id)
         {
-            return this.cache.computeIfAbsent("Article" + id, () -> Optional.ofNullable(accessor.getByArticleId(id))
-                                                                            .map(article -> article.getResult())
-                                                                            .map(result -> result.get(id))
-                                                                            .orElse(null),
-                                              ArticleResult.class);
+            return Optional.ofNullable(accessor.getByArticleId(id))
+                           .map(article -> article.getResult())
+                           .map(result -> result.get(id))
+                           .orElse(null);
         }
 
         @Override
@@ -237,17 +260,37 @@ public class PMCUtils implements Cacheable<PMCUtils>
         @Override
         public Optional<byte[]> resolvePDF()
         {
-            try
-            {
-                return Optional.ofNullable(this.cache.computeIfAbsent("PDF" + this.id, () -> this.articleIndexSupplier.get()
-                                                                                                                      .resolvePDF(this.id),
-                                                                      byte[].class));
-            }
-            catch (Exception e)
-            {
-                this.exceptionHandler.accept(e);
-                return Optional.empty();
-            }
+            return this.cloudArticleResolver.get()
+                                            .flatMap(CloudArticle::resolvePDF);
+        }
+
+        @Override
+        public Optional<String> resolveFullText()
+        {
+            return this.cloudArticleResolver.get()
+                                            .flatMap(CloudArticle::resolveText);
+        }
+
+        @Override
+        public Optional<String> resolveXML()
+        {
+            return this.cloudArticleResolver.get()
+                                            .flatMap(CloudArticle::resolveXML);
+        }
+
+        @Override
+        public Optional<String> getLicenseCode()
+        {
+            return this.cloudArticleResolver.get()
+                                            .flatMap(CloudArticle::getLicenseCode);
+        }
+
+        @Override
+        public boolean isRetracted()
+        {
+            return this.cloudArticleResolver.get()
+                                            .map(CloudArticle::isRetracted)
+                                            .orElse(false);
         }
 
         @Override
@@ -274,16 +317,9 @@ public class PMCUtils implements Cacheable<PMCUtils>
         @Override
         public boolean hasPDF()
         {
-            try
-            {
-                return this.articleIndexSupplier.get()
-                                                .contains(this.id);
-            }
-            catch (Exception e)
-            {
-                this.exceptionHandler.accept(e);
-                return false;
-            }
+            return this.cloudArticleResolver.get()
+                                            .map(CloudArticle::hasPDF)
+                                            .orElse(false);
         }
 
         @Override
@@ -320,12 +356,5 @@ public class PMCUtils implements Cacheable<PMCUtils>
                                                    });
         }
 
-    }
-
-    private OpenAccessArticleIndex loadOpenAccessArticleIndex()
-    {
-        return PMCFtpUtils.newInstance()
-                          .usingCache(this.cache)
-                          .loadOpenAccessArticleIndex();
     }
 }

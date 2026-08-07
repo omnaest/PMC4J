@@ -31,8 +31,22 @@ plain anonymous HTTPS — no AWS SDK, no credentials. Each article version is on
 exists, plus media. Because the key follows from the PMCID, resolving one article costs two
 small requests instead of the 314 MB manifest download the FTP path needed.
 
-`PMCUtils` still resolves PDFs via `PMCFtpUtils` — rewiring it onto `PMCCloudUtils` is the
-outstanding piece of the migration.
+`PMCUtils` resolves content via `PMCCloudUtils`; nothing in the facade reaches the FTP path any
+more. `PMCFtpUtils` is retained only for callers still using it directly, which is why
+`CommonsFTP`, `CommonsCSV` and `CommonsTable` are still dependencies — they drop out when that
+class is finally deleted.
+
+Because the cloud dataset covers the whole open access subset, `Article.hasPDF()` now also sees
+commercial-use articles; the old FTP manifest indexed the non-commercial subset only.
+
+### Do not nest cache lookups
+
+`PMCUtils` and the `RestClient` share the caller's `Cache`. `CachedRestClient.requestGet` already
+does a `computeIfAbsent` keyed by request URL, so wrapping an accessor call in a second
+`computeIfAbsent` on the same cache nests them — and a concurrent in-memory cache
+(`ConcurrentHashMap`) then throws `IllegalStateException: Recursive update` whenever the inner key
+lands in the bin the outer one is updating. That makes it intermittent and hash-dependent: it hid
+for years behind `withLocalCache()` and small result sets. Cache at one level only.
 
 ## Code style
 
