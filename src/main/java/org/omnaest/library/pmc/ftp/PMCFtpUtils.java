@@ -32,9 +32,15 @@ import org.omnaest.utils.table.domain.Row;
 
 public class PMCFtpUtils
 {
-    private static final String FTP_FTP_NCBI_NLM_NIH_GOV_PUB_PMC = "ftp://ftp.ncbi.nlm.nih.gov/pub/pmc/";
+    /**
+     * NCBI moved the PMC bulk datasets into a "deprecated" subdirectory; the former root paths now answer with FTP 550. Per
+     * ftp.ncbi.nlm.nih.gov/pub/pmc/readme.txt these legacy files are scheduled for removal in August 2026, so this is a stopgap - the durable replacement is
+     * the AWS Open Data distribution over HTTPS/S3, see https://pmc.ncbi.nlm.nih.gov/tools/cloud/
+     */
+    private static final String PMC_FTP_BASE_URL          = "ftp://ftp.ncbi.nlm.nih.gov/pub/pmc/deprecated/";
+    private static final String OPEN_ACCESS_PDF_INDEX_URL = PMC_FTP_BASE_URL + "oa_non_comm_use_pdf.csv";
 
-    private Cache               cache                            = CacheUtils.newConcurrentInMemoryCache();
+    private Cache               cache                     = CacheUtils.newConcurrentInMemoryCache();
 
     public static PMCFtpUtils newInstance()
     {
@@ -68,7 +74,7 @@ public class PMCFtpUtils
             return FTPUtils.load()
                            .withAnonymousCredentials()
                            .withNumberOfRetries(2)
-                           .fromUrl("ftp://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_non_comm_use_pdf.csv")
+                           .fromUrl(OPEN_ACCESS_PDF_INDEX_URL)
                            .map(FTPResource::asString)
                            .orElseThrow(() -> new IllegalStateException("Unable to load article index from ftp"));
         }, String.class);
@@ -91,7 +97,7 @@ public class PMCFtpUtils
                 Optional<Row> row = index.getRowByValue("PMC" + id);
                 return row.map(r -> r.getCell("File"))
                           .filter(cell -> !cell.isBlank())
-                          .map(cell -> FTP_FTP_NCBI_NLM_NIH_GOV_PUB_PMC + cell.getValue())
+                          .map(cell -> PMC_FTP_BASE_URL + cell.getValue())
                           .orElse(null);
             }
 

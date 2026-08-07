@@ -274,8 +274,16 @@ public class PMCUtils implements Cacheable<PMCUtils>
         @Override
         public boolean hasPDF()
         {
-            return this.articleIndexSupplier.get()
-                                            .contains(this.id);
+            try
+            {
+                return this.articleIndexSupplier.get()
+                                                .contains(this.id);
+            }
+            catch (Exception e)
+            {
+                this.exceptionHandler.accept(e);
+                return false;
+            }
         }
 
         @Override
