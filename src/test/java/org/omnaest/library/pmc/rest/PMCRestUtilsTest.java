@@ -15,6 +15,12 @@
  ******************************************************************************/
 package org.omnaest.library.pmc.rest;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +32,55 @@ import org.omnaest.library.pmc.rest.domain.raw.SearchResult;
 
 public class PMCRestUtilsTest
 {
+    /**
+     * A whole result page resolved with one ESummary request rather than one per article.
+     */
+    @Test
+    @Ignore
+    public void testGetByArticleIds() throws Exception
+    {
+        PMCRestAccessor restAccessor = PMCRestUtils.getInstance();
+
+        List<String> idlist = restAccessor.searchFor("covid")
+                                          .getEsearchresult()
+                                          .getIdlist();
+        assertFalse(idlist.isEmpty());
+
+        Map<String, ArticleResult> result = restAccessor.getByArticleIds(idlist)
+                                                        .getResult();
+
+        assertEquals(idlist.size(), result.size());
+        idlist.forEach(id -> assertNotNull(result.get(id)
+                                                 .getTitle()));
+    }
+
+    /**
+     * More ids than {@link PMCRestUtils#MAX_ARTICLE_IDS_PER_REQUEST}, so the accessor has to split the call and merge the responses. Sending them as one GET
+     * would answer HTTP 414.
+     */
+    @Test
+    @Ignore
+    public void testGetByArticleIdsBeyondBatchLimit() throws Exception
+    {
+        PMCRestAccessor restAccessor = PMCRestUtils.getInstance();
+
+        List<String> idlist = new ArrayList<>();
+        for (int page = 0; idlist.size() <= PMCRestUtils.MAX_ARTICLE_IDS_PER_REQUEST + 40; page++)
+        {
+            idlist.addAll(restAccessor.searchFor("covid", page)
+                                      .getEsearchresult()
+                                      .getIdlist());
+        }
+
+        Map<String, ArticleResult> result = restAccessor.getByArticleIds(idlist)
+                                                        .getResult();
+
+        assertTrue(idlist.size() > PMCRestUtils.MAX_ARTICLE_IDS_PER_REQUEST);
+        assertEquals(idlist.size(), result.size());
+        idlist.forEach(id -> assertNotNull(result.get(id)
+                                                 .getTitle()));
+    }
+
     @Test
     @Ignore
     public void testGetInstance() throws Exception

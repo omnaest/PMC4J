@@ -20,6 +20,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -51,6 +52,8 @@ public class PMCUtils implements Cacheable<PMCUtils>
 
     private Cache            cache            = CacheUtils.newConcurrentInMemoryCache();
     private ExceptionHandler exceptionHandler = e -> LOG.error("Unexpected exception", e);
+    private String           apiKey           = null;
+    private String           contactEmail     = null;
 
     private PMCUtils()
     {
@@ -72,6 +75,28 @@ public class PMCUtils implements Cacheable<PMCUtils>
     public PMCUtils withExceptionHandler(ExceptionHandler exceptionHandler)
     {
         this.exceptionHandler = exceptionHandler;
+        return this;
+    }
+
+    /**
+     * Sets the NCBI <code>api_key</code>, raising the request limit from 3 to 10 requests per second.
+     *
+     * @see PMCRestAccessor#withApiKey(String)
+     */
+    public PMCUtils withApiKey(String apiKey)
+    {
+        this.apiKey = apiKey;
+        return this;
+    }
+
+    /**
+     * Sets the contact address NCBI uses to warn about problematic traffic before blocking an IP address. Must be the developer of the calling software.
+     *
+     * @see PMCRestAccessor#withContactEmail(String)
+     */
+    public PMCUtils withContactEmail(String contactEmail)
+    {
+        this.contactEmail = contactEmail;
         return this;
     }
 
@@ -152,7 +177,9 @@ public class PMCUtils implements Cacheable<PMCUtils>
     public Stream<Article> searchFor(String query, Sort sort)
     {
         PMCRestAccessor accessor = PMCRestUtils.getInstance()
-                                               .withCache(this.cache);
+                                               .withCache(this.cache)
+                                               .withApiKey(this.apiKey)
+                                               .withContactEmail(this.contactEmail);
         Supplier<List<String>> supplier = new Supplier<List<String>>() {
             private int page = 0;
 
@@ -168,8 +195,18 @@ public class PMCUtils implements Cacheable<PMCUtils>
                                                 .withCache(this.cache)
                                                 .withExceptionHandler(this.exceptionHandler);
         return StreamUtils.fromSupplier(supplier, List::isEmpty)
-                          .flatMap(ids -> ids.stream()
-                                             .map(id -> new ArticleImpl(accessor, cloudUtils, id)));
+                          .flatMap(ids ->
+                          {
+                              // One ESummary request per result page instead of one per article, resolved lazily on the first article that needs it.
+                              // Do not wrap this in a Cache#computeIfAbsent: the accessor holds the same Cache and its RestClient already caches by request
+                              // URL, and nesting the two made a concurrent in memory cache throw IllegalStateException "Recursive update" whenever the inner
+                              // key landed in the bin the outer one was updating.
+                              CachedElement<Map<String, ArticleResult>> pageResolver = CachedElement.of(() -> Optional.ofNullable(accessor.getByArticleIds(ids))
+                                                                                                                     .map(article -> article.getResult())
+                                                                                                                     .orElse(Collections.emptyMap()));
+                              return ids.stream()
+                                        .map(id -> new ArticleImpl(pageResolver, cloudUtils, id));
+                          });
     }
 
     protected static class ArticleImpl implements Article
@@ -178,25 +215,12 @@ public class PMCUtils implements Cacheable<PMCUtils>
         private final CachedElement<Optional<ArticleResult>> articleResolver;
         private final CachedElement<Optional<CloudArticle>>  cloudArticleResolver;
 
-        private ArticleImpl(PMCRestAccessor accessor, PMCCloudUtils cloudUtils, String id)
+        private ArticleImpl(CachedElement<Map<String, ArticleResult>> pageResolver, PMCCloudUtils cloudUtils, String id)
         {
             this.id = id;
-            this.articleResolver = CachedElement.of(() -> Optional.ofNullable(this.resolveArticle(accessor, id)));
+            this.articleResolver = CachedElement.of(() -> Optional.ofNullable(pageResolver.get()
+                                                                                          .get(id)));
             this.cloudArticleResolver = CachedElement.of(() -> cloudUtils.findArticle(id));
-        }
-
-        /**
-         * Deliberately not wrapped in a {@link Cache#computeIfAbsent(String, Supplier, Class)} of its own: the accessor is configured with the same
-         * {@link Cache}, and its {@link org.omnaest.utils.rest.client.RestClient} already caches the response under the request URL, to which an article id
-         * maps one to one. Nesting the two made a concurrent in memory cache throw {@link IllegalStateException} "Recursive update" whenever the inner key
-         * happened to land in the bin the outer one was updating.
-         */
-        private ArticleResult resolveArticle(PMCRestAccessor accessor, String id)
-        {
-            return Optional.ofNullable(accessor.getByArticleId(id))
-                           .map(article -> article.getResult())
-                           .map(result -> result.get(id))
-                           .orElse(null);
         }
 
         @Override

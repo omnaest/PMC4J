@@ -39,6 +39,27 @@ class is finally deleted.
 Because the cloud dataset covers the whole open access subset, `Article.hasPDF()` now also sees
 commercial-use articles; the old FTP manifest indexed the non-commercial subset only.
 
+### NCBI rate limiting and batching
+
+E-utilities allows **3 req/s** per IP anonymously and **10 req/s** with an `api_key`; repeated
+violations get the IP blocked. `PMCRestUtils` therefore sends three identifying parameters:
+
+| Parameter | Set via | Purpose |
+|---|---|---|
+| `api_key` | `withApiKey(...)` | raises 3 → 10 req/s; generated on an NCBI account settings page |
+| `tool` | `withTool(...)`, defaults to `PMC4J` | names the calling software in NCBI's logs |
+| `email` | `withContactEmail(...)` | where NCBI warns before blocking an IP; must be the **developer's** address, not an end user's |
+
+All three are optional to the service, so an unconfigured accessor behaves exactly as before.
+`PMCUtils` forwards `withApiKey` and `withContactEmail` to the accessor.
+
+`getByArticleIds(Collection)` resolves a whole result page with one ESummary call instead of one
+per article — `searchFor` uses it per page, which took the 20-article end-to-end test from ~52s
+to ~5s. `MAX_ARTICLE_IDS_PER_REQUEST` is **200**, matching NCBI's "use POST beyond about 200
+UIDs" guidance; measured against the live service a GET actually survives ~350 PMC ids and
+returns HTTP 414 from 400 upward. Larger collections are split and merged automatically, so
+callers cannot build an over-long URL.
+
 ### Do not nest cache lookups
 
 `PMCUtils` and the `RestClient` share the caller's `Cache`. `CachedRestClient.requestGet` already
