@@ -60,8 +60,7 @@ public class PMCRestUtils
 
     public static PMCRestAccessor getInstance()
     {
-        return new PMCRestAccessor()
-        {
+        return new PMCRestAccessor() {
             private Cache  cache   = null;
             private String baseUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
 

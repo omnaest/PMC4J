@@ -47,7 +47,7 @@ import org.slf4j.LoggerFactory;
 
 public class PMCUtils implements Cacheable<PMCUtils>
 {
-    private static Logger LOG = LoggerFactory.getLogger(PMCUtils.class);
+    private static Logger    LOG              = LoggerFactory.getLogger(PMCUtils.class);
 
     private Cache            cache            = CacheUtils.newConcurrentInMemoryCache();
     private ExceptionHandler exceptionHandler = e -> LOG.error("Unexpected exception", e);
@@ -133,14 +133,13 @@ public class PMCUtils implements Cacheable<PMCUtils>
     {
         PMCRestAccessor accessor = PMCRestUtils.getInstance()
                                                .withCache(this.cache);
-        Supplier<List<String>> supplier = new Supplier<List<String>>()
-        {
+        Supplier<List<String>> supplier = new Supplier<List<String>>() {
             private int page = 0;
 
             @Override
             public List<String> get()
             {
-                return accessor.searchFor(query, this.page++)
+                return accessor.searchFor(query, this.page++, sort)
                                .getEsearchresult()
                                .getIdlist();
             }
@@ -159,8 +158,7 @@ public class PMCUtils implements Cacheable<PMCUtils>
         private final Cache                                  cache;
         private final ExceptionHandler                       exceptionHandler;
 
-        private ArticleImpl(PMCRestAccessor accessor, CachedElement<OpenAccessArticleIndex> articleIndexSupplier, String id, Cache cache,
-                            ExceptionHandler exceptionHandler)
+        private ArticleImpl(PMCRestAccessor accessor, CachedElement<OpenAccessArticleIndex> articleIndexSupplier, String id, Cache cache, ExceptionHandler exceptionHandler)
         {
             this.articleIndexSupplier = articleIndexSupplier;
             this.id = id;
@@ -297,8 +295,7 @@ public class PMCUtils implements Cacheable<PMCUtils>
                                                    .filter(articleId -> articleId.isPMC())
                                                    .findFirst()
                                                    .map(articleId -> articleId.getValue())
-                                                   .map(pmcId -> new PMCReference()
-                                                   {
+                                                   .map(pmcId -> new PMCReference() {
 
                                                        @Override
                                                        public String getLink(LinkType linkType)

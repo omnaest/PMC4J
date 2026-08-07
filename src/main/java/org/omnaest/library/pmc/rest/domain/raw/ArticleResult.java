@@ -27,27 +27,27 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class ArticleResult
 {
     @JsonProperty
-    private String uid;
+    private String          uid;
 
     @JsonProperty
-    private String pubdate;
+    private String          pubdate;
 
     @JsonProperty
-    private String epubdate;
+    private String          epubdate;
 
     @JsonProperty
-    private String title;
+    private String          title;
 
     @JsonProperty
-    private String volume;
+    private String          volume;
 
     @JsonProperty
-    private String issue;
+    private String          issue;
     @JsonProperty
-    private String source;
+    private String          source;
 
     @JsonProperty
-    private List<Author> authors;
+    private List<Author>    authors;
 
     @JsonProperty
     private List<ArticleId> articleids;
@@ -197,7 +197,7 @@ public class ArticleResult
     public String toString()
     {
         return "ArticleResult [uid=" + this.uid + ", pubdate=" + this.pubdate + ", epubdate=" + this.epubdate + ", title=" + this.title + ", volume="
-                + this.volume + ", issue=" + this.issue + ", source=" + this.source + ", authors=" + this.authors + ", articleids=" + this.articleids + "]";
+               + this.volume + ", issue=" + this.issue + ", source=" + this.source + ", authors=" + this.authors + ", articleids=" + this.articleids + "]";
     }
 
 }

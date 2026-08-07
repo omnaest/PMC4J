@@ -27,14 +27,14 @@ import org.omnaest.utils.csv.CSVUtils;
 import org.omnaest.utils.ftp.FTPUtils;
 import org.omnaest.utils.ftp.FTPUtils.FTPResource;
 import org.omnaest.utils.table.Table;
-import org.omnaest.utils.table.components.TableIndex;
+import org.omnaest.utils.table.components.TableColumnIndex;
 import org.omnaest.utils.table.domain.Row;
 
 public class PMCFtpUtils
 {
     private static final String FTP_FTP_NCBI_NLM_NIH_GOV_PUB_PMC = "ftp://ftp.ncbi.nlm.nih.gov/pub/pmc/";
 
-    private Cache cache = CacheUtils.newConcurrentInMemoryCache();
+    private Cache               cache                            = CacheUtils.newConcurrentInMemoryCache();
 
     public static PMCFtpUtils newInstance()
     {
@@ -81,11 +81,10 @@ public class PMCFtpUtils
                            .load()
                            .fromRows(rows);
 
-        TableIndex index = table.as()
-                                .index("Accession ID");
+        TableColumnIndex index = table.as()
+                                      .indexOfColumn("Accession ID");
 
-        return new OpenAccessArticleIndex()
-        {
+        return new OpenAccessArticleIndex() {
             @Override
             public String findUrl(String id)
             {
